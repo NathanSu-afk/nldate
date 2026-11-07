@@ -29,9 +29,22 @@ def _parse_amount(s: str) -> int:
     return int(s)
 
 
+def _apply_delta(base: date, amount: int, unit: str, forward: bool) -> date:
+    sign = 1 if forward else -1
+    if "day" in unit:
+        return base + timedelta(days=amount * sign)
+    elif "week" in unit:
+        return base + timedelta(weeks=amount * sign)
+    elif "month" in unit:
+        return base + relativedelta(months=amount * sign)
+    elif "year" in unit:
+        return base + relativedelta(years=amount * sign)
+    raise ValueError(f"Unknown unit: {unit}")
+
+
 def parse(s: str, today: date | None = None) -> date:
     """Parse a natural language date string into a datetime.date object."""
-    if not s or not s.strip():
+    if not s or not isinstance(s, str) or not s.strip():
         raise ValueError("Empty or whitespace string provided.")
 
     if today is None:
@@ -48,74 +61,57 @@ def parse(s: str, today: date | None = None) -> date:
 
     num_pattern = r"(?:\d+|" + "|".join(NUMBER_WORDS.keys()) + ")"
 
-    # Match "in [amount] [unit]"
-    match_in = re.match(
+    # 1. Match "in [amount] [unit]"
+    m = re.match(
         r"^in\s+("
         + num_pattern
         + r")\s+(day|days|week|weeks|month|months|year|years)$",
         cleaned,
     )
-    if match_in:
-        amount = _parse_amount(match_in.group(1))
-        unit = match_in.group(2)
-        if "day" in unit:
-            return today + timedelta(days=amount)
-        elif "week" in unit:
-            return today + timedelta(weeks=amount)
-        elif "month" in unit:
-            return today + relativedelta(months=amount)
-        elif "year" in unit:
-            return today + relativedelta(years=amount)
+    if m:
+        return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=True)
 
-    # Match "[amount] [unit] ago"
-    match_ago = re.match(
+    # 2. Match "[amount] [unit] from now" or "[amount] [unit] from today"
+    m = re.match(
+        r"^("
+        + num_pattern
+        + r")\s+(day|days|week|weeks|month|months|year|years)\s+from\s+(?:now|today)$",
+        cleaned,
+    )
+    if m:
+        return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=True)
+
+    # 3. Match "[amount] [unit] ago"
+    m = re.match(
         r"^("
         + num_pattern
         + r")\s+(day|days|week|weeks|month|months|year|years)\s+ago$",
         cleaned,
     )
-    if match_ago:
-        amount = _parse_amount(match_ago.group(1))
-        unit = match_ago.group(2)
-        if "day" in unit:
-            return today - timedelta(days=amount)
-        elif "week" in unit:
-            return today - timedelta(weeks=amount)
-        elif "month" in unit:
-            return today - relativedelta(months=amount)
-        elif "year" in unit:
-            return today - relativedelta(years=amount)
+    if m:
+        return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=False)
 
-    # Match offset patterns like "[amount] [unit] before/after [base]"
-    match_offset = re.match(
+    # 4. Match offset: "[amount] [unit] before/after [base]"
+    m = re.match(
         r"^("
         + num_pattern
         + r")\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
         cleaned,
     )
-    if match_offset:
-        amount = _parse_amount(match_offset.group(1))
-        unit = match_offset.group(2)
-        direction = match_offset.group(3)
-        base_str = match_offset.group(4)
+    if m:
+        amount = _parse_amount(m.group(1))
+        unit = m.group(2)
+        direction = m.group(3)
+        base_str = m.group(4)
 
         try:
             base_date = parse(base_str, today=today)
         except ValueError as exc:
             raise ValueError(f"Could not parse base date: {base_str}") from exc
 
-        delta = relativedelta()
-        if "day" in unit:
-            delta = relativedelta(days=amount)
-        elif "week" in unit:
-            delta = relativedelta(weeks=amount)
-        elif "month" in unit:
-            delta = relativedelta(months=amount)
-        elif "year" in unit:
-            delta = relativedelta(years=amount)
+        return _apply_delta(base_date, amount, unit, forward=(direction == "after"))
 
-        return base_date - delta if direction == "before" else base_date + delta
-
+    # 5. Match weekdays: "next [weekday]"
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -125,9 +121,9 @@ def parse(s: str, today: date | None = None) -> date:
         "saturday": 5,
         "sunday": 6,
     }
-    match_next = re.match(r"^next\s+([a-z]+)$", cleaned)
-    if match_next:
-        day_name = match_next.group(1)
+    m = re.match(r"^next\s+([a-z]+)$", cleaned)
+    if m:
+        day_name = m.group(1)
         if day_name in weekdays:
             target_wd = weekdays[day_name]
             current_wd = today.weekday()
@@ -136,6 +132,7 @@ def parse(s: str, today: date | None = None) -> date:
                 days_ahead = 7
             return today + timedelta(days=days_ahead)
 
+    # 6. Fallback to dateutil parser for absolute/fuzzy dates
     try:
         parsed_dt = du_parser.parse(s, fuzzy=True)
         return parsed_dt.date()
