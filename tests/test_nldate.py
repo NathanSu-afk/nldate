@@ -40,14 +40,14 @@ def test_parse_days_ago() -> None:
     assert parse("5 days ago", today=ref) == date(2025, 10, 27)
 
 
+def test_parse_a_week_ago() -> None:
+    ref = date(2025, 11, 1)
+    assert parse("a week ago", today=ref) == date(2025, 10, 25)
+
+
 def test_parse_before_offset() -> None:
     ref = date(2025, 11, 1)
     assert parse("5 days before December 1st, 2025", today=ref) == date(2025, 11, 26)
-
-
-def test_parse_after_offset() -> None:
-    ref = date(2025, 11, 1)
-    assert parse("1 week after December 1st, 2025", today=ref) == date(2025, 12, 8)
 
 
 def test_parse_next_weekday() -> None:

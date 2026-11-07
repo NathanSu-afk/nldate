@@ -5,6 +5,13 @@ from dateutil import parser as du_parser
 from dateutil.relativedelta import relativedelta
 
 
+def _parse_amount(s: str) -> int:
+    s = s.lower()
+    if s in ("a", "an"):
+        return 1
+    return int(s)
+
+
 def parse(s: str, today: date | None = None) -> date:
     """Parse a natural language date string into a datetime.date object."""
     if not s or not s.strip():
@@ -22,11 +29,12 @@ def parse(s: str, today: date | None = None) -> date:
     if cleaned == "yesterday":
         return today - timedelta(days=1)
 
+    # Match "in [amount] [unit]" supporting digits or "a/an"
     match_in = re.match(
-        r"^in\s+(\d+)\s+(day|days|week|weeks|month|months|year|years)$", cleaned
+        r"^in\s+(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)$", cleaned
     )
     if match_in:
-        amount = int(match_in.group(1))
+        amount = _parse_amount(match_in.group(1))
         unit = match_in.group(2)
         if "day" in unit:
             return today + timedelta(days=amount)
@@ -37,11 +45,12 @@ def parse(s: str, today: date | None = None) -> date:
         elif "year" in unit:
             return today + relativedelta(years=amount)
 
+    # Match "[amount] [unit] ago" supporting digits or "a/an"
     match_ago = re.match(
-        r"^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+ago$", cleaned
+        r"^(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)\s+ago$", cleaned
     )
     if match_ago:
-        amount = int(match_ago.group(1))
+        amount = _parse_amount(match_ago.group(1))
         unit = match_ago.group(2)
         if "day" in unit:
             return today - timedelta(days=amount)
@@ -53,11 +62,11 @@ def parse(s: str, today: date | None = None) -> date:
             return today - relativedelta(years=amount)
 
     match_offset = re.match(
-        r"^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
+        r"^(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
         cleaned,
     )
     if match_offset:
-        amount = int(match_offset.group(1))
+        amount = _parse_amount(match_offset.group(1))
         unit = match_offset.group(2)
         direction = match_offset.group(3)
         base_str = match_offset.group(4)
