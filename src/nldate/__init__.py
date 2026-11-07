@@ -58,6 +58,12 @@ def parse(s: str, today: date | None = None) -> date:
         return today + timedelta(days=1)
     if cleaned == "yesterday":
         return today - timedelta(days=1)
+    if cleaned == "last week":
+        return today - timedelta(weeks=1)
+    if cleaned == "last month":
+        return today - relativedelta(months=1)
+    if cleaned == "last year":
+        return today - relativedelta(years=1)
 
     num_pattern = r"(?:\d+|" + "|".join(NUMBER_WORDS.keys()) + ")"
 
@@ -111,7 +117,6 @@ def parse(s: str, today: date | None = None) -> date:
 
         return _apply_delta(base_date, amount, unit, forward=(direction == "after"))
 
-    # 5. Match weekdays: "next [weekday]"
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -121,6 +126,8 @@ def parse(s: str, today: date | None = None) -> date:
         "saturday": 5,
         "sunday": 6,
     }
+
+    # 5. Match "next [weekday]"
     m = re.match(r"^next\s+([a-z]+)$", cleaned)
     if m:
         day_name = m.group(1)
@@ -132,7 +139,19 @@ def parse(s: str, today: date | None = None) -> date:
                 days_ahead = 7
             return today + timedelta(days=days_ahead)
 
-    # 6. Fallback to dateutil parser for absolute/fuzzy dates
+    # 6. Match "last [weekday]"
+    m = re.match(r"^last\s+([a-z]+)$", cleaned)
+    if m:
+        day_name = m.group(1)
+        if day_name in weekdays:
+            target_wd = weekdays[day_name]
+            current_wd = today.weekday()
+            days_ago = (current_wd - target_wd) % 7
+            if days_ago == 0:
+                days_ago = 7
+            return today - timedelta(days=days_ago)
+
+    # 7. Fallback to dateutil parser for absolute/fuzzy dates
     try:
         parsed_dt = du_parser.parse(s, fuzzy=True)
         return parsed_dt.date()
