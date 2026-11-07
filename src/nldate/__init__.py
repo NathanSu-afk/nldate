@@ -67,7 +67,43 @@ def parse(s: str, today: date | None = None) -> date:
 
     num_pattern = r"(?:\d+|" + "|".join(NUMBER_WORDS.keys()) + ")"
 
-    # 1. Match "in [amount] [unit]"
+    # 1. Match compound or single offsets: "[offset_expr] before/after [base_date]"
+    # e.g., "2 years, 3 months before dec. 1, 2025" or "5 days before december 1st, 2025"
+    m = re.match(r"^(.*?)\s+(before|after)\s+(.+)$", cleaned)
+    if m:
+        offset_part = m.group(1).strip()
+        direction = m.group(2)
+        base_str = m.group(3).strip()
+
+        try:
+            base_date = parse(base_str, today=today)
+        except ValueError as exc:
+            raise ValueError(f"Could not parse base date: {base_str}") from exc
+
+        # Extract all numeric/word amounts and units from the offset part using findall
+        # e.g., "2 years, 3 months" -> [('2', 'years'), ('3', 'months')]
+        pairs = re.findall(
+            r"(" + num_pattern + r")\s+(day|days|week|weeks|month|months|year|years)",
+            offset_part,
+        )
+        if not pairs:
+            raise ValueError(f"Could not parse offset expression: {offset_part}")
+
+        delta = relativedelta()
+        for amt_str, unit in pairs:
+            amt = _parse_amount(amt_str)
+            if "day" in unit:
+                delta += relativedelta(days=amt)
+            elif "week" in unit:
+                delta += relativedelta(weeks=amt)
+            elif "month" in unit:
+                delta += relativedelta(months=amt)
+            elif "year" in unit:
+                delta += relativedelta(years=amt)
+
+        return base_date - delta if direction == "before" else base_date + delta
+
+    # 2. Match "in [amount] [unit]"
     m = re.match(
         r"^in\s+("
         + num_pattern
@@ -77,7 +113,7 @@ def parse(s: str, today: date | None = None) -> date:
     if m:
         return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=True)
 
-    # 2. Match "[amount] [unit] from now" or "[amount] [unit] from today"
+    # 3. Match "[amount] [unit] from now" or "[amount] [unit] from today"
     m = re.match(
         r"^("
         + num_pattern
@@ -87,7 +123,7 @@ def parse(s: str, today: date | None = None) -> date:
     if m:
         return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=True)
 
-    # 3. Match "[amount] [unit] ago"
+    # 4. Match "[amount] [unit] ago"
     m = re.match(
         r"^("
         + num_pattern
@@ -96,26 +132,6 @@ def parse(s: str, today: date | None = None) -> date:
     )
     if m:
         return _apply_delta(today, _parse_amount(m.group(1)), m.group(2), forward=False)
-
-    # 4. Match offset: "[amount] [unit] before/after [base]"
-    m = re.match(
-        r"^("
-        + num_pattern
-        + r")\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
-        cleaned,
-    )
-    if m:
-        amount = _parse_amount(m.group(1))
-        unit = m.group(2)
-        direction = m.group(3)
-        base_str = m.group(4)
-
-        try:
-            base_date = parse(base_str, today=today)
-        except ValueError as exc:
-            raise ValueError(f"Could not parse base date: {base_str}") from exc
-
-        return _apply_delta(base_date, amount, unit, forward=(direction == "after"))
 
     weekdays = {
         "monday": 0,
