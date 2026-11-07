@@ -58,6 +58,10 @@ def parse(s: str, today: date | None = None) -> date:
         return today + timedelta(days=1)
     if cleaned == "yesterday":
         return today - timedelta(days=1)
+    if cleaned in ("the day after tomorrow", "day after tomorrow"):
+        return today + timedelta(days=2)
+    if cleaned in ("the day before yesterday", "day before yesterday"):
+        return today - timedelta(days=2)
     if cleaned == "last week":
         return today - timedelta(weeks=1)
     if cleaned == "last month":
@@ -68,7 +72,6 @@ def parse(s: str, today: date | None = None) -> date:
     num_pattern = r"(?:\d+|" + "|".join(NUMBER_WORDS.keys()) + ")"
 
     # 1. Match compound or single offsets: "[offset_expr] before/after [base_date]"
-    # e.g., "2 years, 3 months before dec. 1, 2025" or "5 days before december 1st, 2025"
     m = re.match(r"^(.*?)\s+(before|after)\s+(.+)$", cleaned)
     if m:
         offset_part = m.group(1).strip()
@@ -80,8 +83,6 @@ def parse(s: str, today: date | None = None) -> date:
         except ValueError as exc:
             raise ValueError(f"Could not parse base date: {base_str}") from exc
 
-        # Extract all numeric/word amounts and units from the offset part using findall
-        # e.g., "2 years, 3 months" -> [('2', 'years'), ('3', 'months')]
         pairs = re.findall(
             r"(" + num_pattern + r")\s+(day|days|week|weeks|month|months|year|years)",
             offset_part,
