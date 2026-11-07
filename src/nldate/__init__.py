@@ -4,11 +4,28 @@ from datetime import date, timedelta
 from dateutil import parser as du_parser
 from dateutil.relativedelta import relativedelta
 
+NUMBER_WORDS = {
+    "a": 1,
+    "an": 1,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
+
 
 def _parse_amount(s: str) -> int:
     s = s.lower()
-    if s in ("a", "an"):
-        return 1
+    if s in NUMBER_WORDS:
+        return NUMBER_WORDS[s]
     return int(s)
 
 
@@ -29,9 +46,14 @@ def parse(s: str, today: date | None = None) -> date:
     if cleaned == "yesterday":
         return today - timedelta(days=1)
 
-    # Match "in [amount] [unit]" supporting digits or "a/an"
+    num_pattern = r"(?:\d+|" + "|".join(NUMBER_WORDS.keys()) + ")"
+
+    # Match "in [amount] [unit]"
     match_in = re.match(
-        r"^in\s+(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)$", cleaned
+        r"^in\s+("
+        + num_pattern
+        + r")\s+(day|days|week|weeks|month|months|year|years)$",
+        cleaned,
     )
     if match_in:
         amount = _parse_amount(match_in.group(1))
@@ -45,9 +67,12 @@ def parse(s: str, today: date | None = None) -> date:
         elif "year" in unit:
             return today + relativedelta(years=amount)
 
-    # Match "[amount] [unit] ago" supporting digits or "a/an"
+    # Match "[amount] [unit] ago"
     match_ago = re.match(
-        r"^(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)\s+ago$", cleaned
+        r"^("
+        + num_pattern
+        + r")\s+(day|days|week|weeks|month|months|year|years)\s+ago$",
+        cleaned,
     )
     if match_ago:
         amount = _parse_amount(match_ago.group(1))
@@ -61,8 +86,11 @@ def parse(s: str, today: date | None = None) -> date:
         elif "year" in unit:
             return today - relativedelta(years=amount)
 
+    # Match offset patterns like "[amount] [unit] before/after [base]"
     match_offset = re.match(
-        r"^(\d+|a|an)\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
+        r"^("
+        + num_pattern
+        + r")\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
         cleaned,
     )
     if match_offset:
