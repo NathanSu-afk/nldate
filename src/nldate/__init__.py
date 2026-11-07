@@ -2,6 +2,7 @@ import re
 from datetime import date, timedelta
 
 from dateutil import parser as du_parser
+from dateutil.relativedelta import relativedelta
 
 
 def parse(s: str, today: date | None = None) -> date:
@@ -32,9 +33,9 @@ def parse(s: str, today: date | None = None) -> date:
         elif "week" in unit:
             return today + timedelta(weeks=amount)
         elif "month" in unit:
-            return today + timedelta(days=amount * 30)
+            return today + relativedelta(months=amount)
         elif "year" in unit:
-            return today + timedelta(days=amount * 365)
+            return today + relativedelta(years=amount)
 
     match_ago = re.match(
         r"^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+ago$", cleaned
@@ -47,9 +48,9 @@ def parse(s: str, today: date | None = None) -> date:
         elif "week" in unit:
             return today - timedelta(weeks=amount)
         elif "month" in unit:
-            return today - timedelta(days=amount * 30)
+            return today - relativedelta(months=amount)
         elif "year" in unit:
-            return today - timedelta(days=amount * 365)
+            return today - relativedelta(years=amount)
 
     match_offset = re.match(
         r"^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+(before|after)\s+(.+)$",
@@ -66,15 +67,15 @@ def parse(s: str, today: date | None = None) -> date:
         except ValueError as exc:
             raise ValueError(f"Could not parse base date: {base_str}") from exc
 
-        delta = timedelta(0)
+        delta = relativedelta()
         if "day" in unit:
-            delta = timedelta(days=amount)
+            delta = relativedelta(days=amount)
         elif "week" in unit:
-            delta = timedelta(weeks=amount)
+            delta = relativedelta(weeks=amount)
         elif "month" in unit:
-            delta = timedelta(days=amount * 30)
+            delta = relativedelta(months=amount)
         elif "year" in unit:
-            delta = timedelta(days=amount * 365)
+            delta = relativedelta(years=amount)
 
         return base_date - delta if direction == "before" else base_date + delta
 
